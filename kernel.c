@@ -27,6 +27,7 @@ u32 ticks = 0;
 #include "acpi.h"
 #include "bios.h"
 #include "vfs.h"
+#include "fpu.h"
 
 struct object *echo(struct objectArray* args)
 {
@@ -482,6 +483,7 @@ void testdrawimage()
 extern void keyboard_isr_handler();
 
 void main(char *cmdline){
+	fpu_init();
 #ifdef BIOSDISK
 	init_bios();
 #endif
@@ -532,6 +534,7 @@ void main(char *cmdline){
 	create_process((u32)process_mouse,"mouse demo",testdrawmouse);
 #endif
 	create_process((u32)emptyprocess,"image demo",testdrawimage);
+	create_process((u32)emptyprocess,"zhirGL demo",draw_some);
 
 	is_interrupt_enabled = true;
 	asm volatile ("sti");
