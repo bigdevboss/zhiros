@@ -1,7 +1,7 @@
 CC = gcc
 ASMC = nasm
 
-CFLAGS = -Wint-conversion -m32 -fno-stack-protector
+CFLAGS = -Wint-conversion -m32 -fno-stack-protector -ffreestanding -O0 -m80387 -mfpmath=387 -mno-sse -mno-sse2
 ASMFLAGS = -f elf32
 LDFLAGS = -m elf_i386 -T linker.ld 
 

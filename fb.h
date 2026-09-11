@@ -1,5 +1,5 @@
 #include "font8x16.h"
-
+#include "zhirglmath.h"
 
 u8 colorscheme=0;
 u64 fb_addr = 0;
@@ -10,6 +10,12 @@ u32 screen_pitch = 0;
 u32 current_process = 1;
 
 bool clear_signal = false;
+
+typedef struct {
+    int x;
+    int y;
+} Point;
+
 
 const u32 vga_palette[16] = {
     0x000000, 0x0000AA, 0x00AA00, 0x00AAAA,
@@ -42,12 +48,121 @@ void put_sym(u8 sym, u32 startx, u32 starty,u32 color,u32 bgcolor)
 
 void draw_horisontal_line(u32 startx, u32 endx, u32 y, u32 color)
 {
-	for(int x = startx; x<endx;x++)put_pixel(x,y,color);
+	for(int x = startx; x < endx;x++) put_pixel(x,y,color);
+}
+
+void draw_vertices(Point *point_start, int size, int color) {
+
+	for (int i = 0; i < size; i++) {
+		int startx = point_start[i].x;
+		int starty = point_start[i].y;
+		int endx = point_start[(i+1) % size].x;
+		int endy = point_start[(i+1) % size].y;
+
+		int dx = abs_val(endx - startx);
+		int dy = abs_val(endy - starty);
+			
+		int sx = (startx < endx) ? 1 : -1;
+		int sy = (starty < endy) ? 1 : -1;
+			
+		int err = dx - dy;
+		int e2;
+
+		while (1) {
+			put_pixel(startx, starty, color);
+				
+			if (startx == endx && starty == endy) {
+				break;
+			}
+				
+			e2 = 2 * err;
+				
+			if (e2 > -dy) {
+				err -= dy;
+				startx += sx;
+			}
+				
+			if (e2 < dx) {
+				err += dx;
+				starty += sy;
+			}
+		}
+	}
+}
+
+void fill_polygon(Point *points, int count, int color)
+{
+
+    if (points == 0 || count < 3)
+        return;
+
+    int min_y = points[0].y;
+    int max_y = points[0].y;
+
+    for (int i = 1; i < count; i++)
+    {
+        if (points[i].y < min_y)
+            min_y = points[i].y;
+
+        if (points[i].y > max_y)
+            max_y = points[i].y;
+    }
+
+    int intersections[count];
+
+    for (int y = min_y; y <= max_y; y++)
+    {
+        int intersection_count = 0;
+
+        for (int i = 0; i < count; i++)
+        {
+            int next = (i + 1) % count;
+
+            int x1 = points[i].x;
+            int y1 = points[i].y;
+
+            int x2 = points[next].x;
+            int y2 = points[next].y;
+
+            if ((y1 <= y && y < y2) || (y2 <= y && y < y1))
+            {
+                int x = x1 + (y - y1) * (x2 - x1) / (y2 - y1);
+
+                intersections[intersection_count] = x;
+                intersection_count++;
+            }
+        }
+
+        for (int i = 0; i < intersection_count - 1; i++)
+        {
+            for (int j = i + 1; j < intersection_count; j++)
+            {
+                if (intersections[i] > intersections[j])
+                {
+                    int temp = intersections[i];
+                    intersections[i] = intersections[j];
+                    intersections[j] = temp;
+                }
+            }
+        }
+
+        for (int i = 0; i < intersection_count - 1; i++)
+        {
+            int start_x = intersections[i];
+            int end_x = intersections[i + 1];
+
+            for (int x = start_x; x <= end_x; x++)
+            {
+                put_pixel(x, y, color);
+            }
+        }
+    }
 }
 
 void put_text(char *text, u32 startx, u32 starty, u32 color, u32 bgcolor)
 {
-	for(int i = 0;i<strlen(text);i++)
+	int len = strlen(text);
+	for(int i = 0;i<len;i++)
 	{
 		put_sym(text[i],startx+i*8,starty,color,bgcolor);
 	}
@@ -100,29 +215,43 @@ void ega2fb() {
 
 }
 
+bool disable_sch = false;
 void windowsmanager()
 {
-	while(true)
-	{
-		if(clear_signal){
-			clearframe();
-			clear_signal = false;
-		}
-		if(tasks[current_process]){
-			asm volatile("cli");
+        int old_time = ticks;
 
-			char *name = tasks[current_process]->name;
-			u32 x = (screen_width/8 - strlen(name)) * 4;
-			put_text(name,x,0,0xFFFFFF,0);
-			draw_horisontal_line(0,screen_width,16,0xFFFFFF);
-			tasks[current_process]->drawframe();
-  			pic_eoi();
-			asm volatile("sti");
-		}
-		else clearframe();
+        while(true)
+        {
+                if(clear_signal){
+                        clearframe();
+                        clear_signal = false;
+                }
+                if(tasks[current_process]){
+                        disable_sch=true;
+
+
+                        char *name = tasks[current_process]->name;
+                        u32 x = (screen_width/8 - strlen(name)) * 4;
+                        put_text(name,x,0,0xFFFFFF,0);
+                        draw_horisontal_line(0,screen_width,16,0xFFFFFF);
+                        tasks[current_process]->drawframe();
+                        //pic_eoi();
+
+                        if(ticks > old_time){
+                                int fps = 1000/(ticks-old_time);
+                                char buffer[24];
+                                char*fps_text = int2str(fps,buffer);
+                                put_text("   ",screen_width-3*4-20,0,0xFFFFFF,0);
+                                put_text(fps_text,screen_width-strlen(fps_text)*4-20,0,0xFFFFFF,0);
+                        }
+                        old_time = ticks;
+
+                        disable_sch=false;
+                }
+                else clearframe();
                 asm volatile("hlt");
-	}
-}
+        }
+} 
 
 struct image{
 	u16 width;
@@ -136,3 +265,34 @@ void drawimage(struct image*img,int startx,int starty)
 		for(int y = 0;y<img->height;y++)
 			put_pixel(x+startx,y+starty,img->bytes[y*img->width+x]);
 }
+
+vec2 center_figure(Point *points, int size) {
+    int min_x, min_y, max_x, max_y;
+
+    int x1, x2, y1, y2;
+
+    for (int i = 0; i < size; i++) {
+            x1 = points[i].x;
+            x2 = points[(i+1) % size].x;
+
+            min_x = min_int(x1, x2);
+            max_x = max_int(x1, x2);
+    }
+
+    for (int i = 0; i < size; i++) {
+            y1 = points[i].y;
+            y2 = points[(i+1) % size].y;
+
+            min_y = min_int(y1, y2);
+            max_y = max_int(y1, y2);
+    }
+
+    float center_x = abs_val(max_x - min_x)/2;
+    float center_y = abs_val(max_y - min_y)/2;
+
+    vec2 center = vec2_create(center_x, center_y);
+
+    return center;
+}
+
+#include "zhirGL.h"

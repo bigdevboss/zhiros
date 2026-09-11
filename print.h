@@ -125,6 +125,20 @@ u32 str2int(char *str)
 	return ret;
 }
 
+char* int2str(u32 num, char *buffer)
+{
+	buffer[11] = '\0';buffer[10] = '0';
+	int i = 10;
+	if(num==0)i--;
+	for(;num>0;i--)
+	{
+		buffer[i] = num%10 +'0';
+		num/=10;
+	}
+
+	return buffer+i+1;
+}
+
 void __set_cursor_offset(short offset)
 {
 	port_byte_out(VGA_CTRL_REGISTER, VGA_OFFSET_LOW);
@@ -250,7 +264,7 @@ void print_hex(u32 num)
 
 void print_int(u32 num)
 {
-	char buffer[12]; buffer[11] = '\0';buffer[10] = '0';
+	char buffer[12]; buffer[11] = '\0'; buffer[10] = '0';
 	int i = 10;
 	if(num==0)i--;
 	for(;num>0;i--)
@@ -261,6 +275,26 @@ void print_int(u32 num)
 	
 	print(buffer+i+1);
 }
+
+void print_float(float num_f)
+{
+  int num = (num_f*1000.f);
+  
+  char buffer[12]; buffer[11] = '\0';buffer[10] = '0';
+  int i = 10;
+  if(num==0)i--;
+  for(;num>0;i--)
+  {
+    if(i==7){
+      buffer[i] = '.';
+      continue;
+    }
+    buffer[i] = num%10 + '0';
+    num/=10;
+  }
+  
+  print(buffer+i+1);
+} 
 
 void hexdump(char *data, u32 size)
 {
